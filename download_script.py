@@ -7,24 +7,26 @@ import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
 
-# GitHub Actions 选框输入域名镜像网站,极为快捷!!!不需要修改脚本
-# 优先读取环境变量 TARGET_URL,读取不到时使用默认值
+# ---------------------------------------------------------
+# 1. 配置参数 (支持 GitHub Actions 动态传入及本地运行)
+# ---------------------------------------------------------
+# 优先从环境变量读取 TARGET_URL，如果读取不到则使用默认值
 TARGET_URL = os.environ.get("TARGET_URL", "https://www.geoglify.com/")
 
-# ---------------------------------------------------------
-# 1. 配置参数
-# ---------------------------------------------------------
-TARGET_URL = "https://www.geoglify.com/"
+# 默认保存目录 (后续打包时直接打包这个目录)
 SAVE_DIR = "./geoglify_mirror"
-MAX_WORKERS = 5  # 并发下载数量
-MAX_DEPTH = 5  # 路由发现最大深度
+
+MAX_WORKERS = 5   # 并发下载数量
+MAX_DEPTH = 5     # 路由发现最大深度
 
 # HTTP 代理配置
-PROXIES = {
-    #"http": "http://127.0.0.1:16662",   # 配置使用隧道连接
-    #"https": "http://127.0.0.1:16662",  # 配置使用隧道连接
-    None                                 # 在 GitHub Actions 环境中直连即可
-}
+# 如果在 GitHub Actions 中运行 (通过检查 GITHUB_ACTIONS 环境变量)，则直连；本地运行如需代理可自行打开注释
+if os.environ.get("GITHUB_ACTIONS"):
+    PROXIES = None
+else:
+    # 如果本地需要走代理，可以取消下面注释：
+    # PROXIES = {"http": "http://127.0.0.1:16662", "https": "http://127.0.0.1:16662"}
+    PROXIES = None
 
 # 排除的域名 (地图瓦片、分析等)
 EXCLUDE_DOMAINS = [
@@ -60,7 +62,7 @@ failed_urls = set()
 discovered_routes = set()
 
 # ---------------------------------------------------------
-# 3. 核心判断逻辑
+# 3. 核心判断与路径生成逻辑
 # ---------------------------------------------------------
 def is_target_domain(url):
     """判断 URL 是否属于目标域名"""
@@ -102,14 +104,15 @@ def is_valid_asset(url):
 
 
 def get_local_path(url):
-    """根据 URL 生成本地保存路径"""
+    """【核心修正位置】根据 URL 自动生成并保存到 ./geoglify_mirror 目录下"""
     parsed = urlparse(url)
     path = parsed.path
 
-    # 处理根路径
+    # 处理根路径或以斜杠结尾的路由
     if not path or path.endswith("/"):
         path += "index.html"
 
+    # 去掉最前面的 '/' 并与 SAVE_DIR ('./geoglify_mirror') 拼接
     local_path = os.path.join(SAVE_DIR, path.lstrip("/"))
     return local_path
 
@@ -222,7 +225,7 @@ def extract_json_urls(json_str, base_url):
 # 4. 下载与解析
 # ---------------------------------------------------------
 def download_file(url):
-    """下载单个文件"""
+    """下载单个文件并保存至指定本地目录"""
     if url in visited_urls:
         return None
 
@@ -254,18 +257,15 @@ def download_file(url):
             new_urls = set()
 
             if "text/html" in content_type:
-                # HTML 文件：提取资源和路由
                 text_content = response.text
                 new_urls.update(extract_assets_from_html(text_content, url))
                 new_urls.update(extract_route_from_html(text_content, url))
 
             elif "text/css" in content_type:
-                # CSS 文件：提取资源 URL
                 text_content = response.text
                 new_urls.update(extract_assets_from_html(text_content, url))
 
             elif "application/json" in content_type or "text/json" in content_type:
-                # JSON 文件：提取 URL
                 try:
                     text_content = response.text
                     new_urls.update(extract_json_urls(text_content, url))
@@ -273,13 +273,11 @@ def download_file(url):
                     pass
 
             elif "application/javascript" in content_type or url.endswith(".js"):
-                # JavaScript 文件：提取 URL (动态导入、资源等)
                 text_content = response.text
                 new_urls.update(extract_assets_from_html(text_content, url))
                 new_urls.update(extract_json_urls(text_content, url))
 
             elif "image/svg" in content_type:
-                # SVG 文件：提取资源
                 text_content = response.text
                 new_urls.update(extract_assets_from_html(text_content, url))
 
@@ -358,6 +356,7 @@ def get_dir_size(path):
 def main():
     print("=" * 80)
     print(f"🌐 网站镜像工具 - 目标: {TARGET_URL}")
+    print(f"📁 保存路径: {os.path.abspath(SAVE_DIR)}")
     print("=" * 80)
 
     # 第一步：发现路由
@@ -401,7 +400,7 @@ def main():
         for url in sorted(failed_urls):
             print(f"    {url}")
     elif failed_urls:
-        print(f"\n有 {len(failed_urls)} 个文件失败（太多,已省略）")
+        print(f"\n有 {len(failed_urls)} 个文件失败（太多，已省略）")
 
     print("\n📝 启动本地服务器:")
     print(f"    cd {SAVE_DIR}")
