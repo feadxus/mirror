@@ -1,5 +1,3 @@
-#!/home/tor/.python-env/bin/python
-
 import os
 import re
 import json
@@ -8,6 +6,10 @@ from pathlib import Path
 import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from collections import deque
+
+# GitHub Actions 选框输入域名镜像网站,极为快捷!!!不需要修改脚本
+# 优先读取环境变量 TARGET_URL,读取不到时使用默认值
+TARGET_URL = os.environ.get("TARGET_URL", "https://www.geoglify.com/")
 
 # ---------------------------------------------------------
 # 1. 配置参数
@@ -399,7 +401,7 @@ def main():
         for url in sorted(failed_urls):
             print(f"    {url}")
     elif failed_urls:
-        print(f"\n有 {len(failed_urls)} 个文件失败（太多，已省略）")
+        print(f"\n有 {len(failed_urls)} 个文件失败（太多,已省略）")
 
     print("\n📝 启动本地服务器:")
     print(f"    cd {SAVE_DIR}")
