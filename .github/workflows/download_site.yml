@@ -26,7 +26,7 @@ jobs:
           # 增加等待时间，让容器有足够时间启动
           echo "⏳ 等待容器启动..."
           for i in {1..30}; do
-            if curl -s http://localhost:8080 > /dev/null 2>&1; do
+            if curl -s http://localhost:8188 > /dev/null 2>&1; then
               echo "✅ 容器已就绪！"
               break
             fi
