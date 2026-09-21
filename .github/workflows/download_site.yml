@@ -1,33 +1,57 @@
-name: Test Docker Tunnel (Lightweight)
+name: 🐳 Docker + 🌐 Localtunnel 穿透隧道
 
 on:
-  workflow_dispatch:
+  workflow_dispatch:  # 手动触发
+  # push:
+  #   branches: [ main ]  # 如果需要自动触发，取消注释
 
 jobs:
-  test-tunnel:
+  run-docker:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Start lightweight web server
+      - name: 📥 检出代码仓库
+        uses: actions/checkout@v4
+      
+      - name: 🔨 配置 Docker 构建环境
+        uses: docker/setup-buildx-action@v2
+      
+      - name: 🚀 启动 ComfyUI Docker 容器
         run: |
           docker run -d \
             --name test-server \
             -p 8080:80 \
             nginx:alpine
           
-          sleep 3
-          
-          # 验证容器已启动
-          curl http://localhost:8080 || echo "Server not ready yet"
+          # 增加等待时间，让容器有足够时间启动
+          echo "⏳ 等待容器启动..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8080 > /dev/null 2>&1; do
+              echo "✅ 容器已就绪！"
+              break
+            fi
+            echo "⌛ 正在等待... ($i/30)"
+            sleep 2
+          done
       
-      - name: Install localtunnel
-        run: npm install -g localtunnel
-      
-      - name: Expose via localtunnel
+      - name: 📦 安装 Node.js 和 Localtunnel
         run: |
-          npx localtunnel --port 8080 --subdomain test-comfyui-${{ github.run_id }} &
-          LT_PID=$!
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          npm install -g localtunnel
+      
+      - name: 🌍 启动网络穿透隧道 (Localtunnel)
+        run: |
+          npx localtunnel --port 8080 &
+          TUNNEL_PID=$!
           
-          # 保持连接活跃 55 分钟
+          # 等待穿透链接建立
+          echo "🔗 正在建立穿透连接..."
+          sleep 5
+          echo "✨ 穿透隧道已启动！"
+          
+          # 保持运行 55 分钟（留 5 分钟余量，总时间 1 小时内）
           sleep 3300
           
-          kill $LT_PID || true
+          # 清理
+          kill $TUNNEL_PID || true
