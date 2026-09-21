@@ -1,63 +1,47 @@
-name: Download Site and Upload to Google Drive
+name: Docker with Localtunnel
 
 on:
-  workflow_dispatch:
-    inputs:
-      target_url:
-        description: '🌐 请输入要镜像的目标网站地址'
-        required: true
-        default: 'https://www.geoglify.com/'
-
-env:
-  TARGET_URL: ${{ inputs.target_url }}
+  workflow_dispatch:  # 手动触发
+  # push:
+  #   branches: [ main ]  # 如果需要自动触发，取消注释
 
 jobs:
-  download-and-upload:
+  run-docker:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: 📦 检出代码
+      - name: Checkout code
         uses: actions/checkout@v4
-
-      - name: 🐍 配置 Python 环境
-        uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-
-      - name: ⚙️ 安装 Python 依赖与 rclone
+      
+      - name: Set up Docker
+        uses: docker/setup-buildx-action@v2
+      
+      - name: Run Docker container
         run: |
-          python -m pip install --upgrade pip
-          pip install requests
-          curl https://rclone.org/install.sh | sudo bash
-
-      - name: 🔑 配置 Google Drive (rclone)
-        env:
-          RCLONE_SECRET_DATA: ${{ secrets.GOOGLE_FEADXUS_DRIVE }}
+          docker run -d \
+            --name comfyui \
+            -p 8188:8188 \
+            feadxus/comfyui-voxcpm:cpu
+          
+          # 等待容器启动
+          sleep 10
+      
+      - name: Install Node.js and Localtunnel
         run: |
-          mkdir -p ~/.config/rclone
-          echo "$RCLONE_SECRET_DATA" > ~/.config/rclone/rclone.conf
-
-      - name: 🌐 运行 Python 脚本抓取网站
+          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
+          sudo apt-get install -y nodejs
+          npm install -g localtunnel
+      
+      - name: Start Localtunnel tunnel
         run: |
-          # 动态将输入的目标 URL 注入 Python 脚本或作为环境变量
-          python download_script.py
-
-      - name: 🗜️ 打包压缩下载的网站文件
-        run: |
-          # 检查目录是否存在且非空
-          if [ ! -d "./geoglify_mirror" ]; then
-            echo "❌ 未找到下载的目录！"
-            exit 1
-          fi
-
-          # 打包文件夹并使用 xz 极限压缩
-          tar -cf site_backup.tar ./geoglify_mirror
-          xz -T0 -9e site_backup.tar
-
-      - name: 📂 上传至 Google Drive
-        run: |
-          rclone mkdir FEADXUS-Google-Drive:/website_backups || true
-          rclone copy site_backup.tar.xz FEADXUS-Google-Drive:/website_backups/
-
-      - name: ✅ 验证上传结果
-        run: |
-          rclone lsf FEADXUS-Google-Drive:/website_backups/
+          npx localtunnel --port 8188 &
+          TUNNEL_PID=$!
+          
+          # 等待穿透链接建立
+          sleep 5
+          
+          # 保持运行 55 分钟（留 5 分钟余量，总时间 1 小时内）
+          sleep 3300
+          
+          # 清理
+          kill $TUNNEL_PID || true
