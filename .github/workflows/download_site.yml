@@ -35,23 +35,19 @@ jobs:
           done
       
       - name: 📦 安装 Node.js 和 Localtunnel
-        run: |
-          curl -fsSL https://deb.nodesource.com/setup_18.x | sudo -E bash -
-          sudo apt-get install -y nodejs
-          npm install -g localtunnel
+        run: npm install -g localtunnel
       
       - name: 🌍 启动网络穿透隧道 (Localtunnel)
         run: |
-          npx localtunnel --port 8080 &
-          TUNNEL_PID=$!
+          npx localtunnel --port 8080 --subdomain test-${{ github.run_id }} &
+          LT_PID=$!
           
-          # 等待穿透链接建立
           echo "🔗 正在建立穿透连接..."
           sleep 5
           echo "✨ 穿透隧道已启动！"
           
-          # 保持运行 55 分钟（留 5 分钟余量，总时间 1 小时内）
+          # 保持连接活跃 55 分钟
           sleep 3300
           
           # 清理
-          kill $TUNNEL_PID || true
+          kill $LT_PID || true
