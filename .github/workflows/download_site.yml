@@ -1,30 +1,53 @@
-name: 定时启动
+name: 🐳 Docker + 🌐 Localtunnel 穿透隧道
 
 on:
-  schedule:
-    # 💡 完美错峰机制:单数日 UTC 08:00 运行,双数日 UTC 09:00 运行,完美绕过 24h 频率锁定
-    - cron: '0 8 1-31/2 * *'
-    - cron: '0 9 2-30/2 * *'
-  workflow_dispatch: # 保留手动触发按钮
+  workflow_dispatch:  # 手动触发
+  # push:
+  #   branches: [ main ]  # 如果需要自动触发，取消注释
 
 jobs:
-  fetch-bridges:
+  run-docker:
     runs-on: ubuntu-latest
-    env:
-      RCLONE_SECRET_DATA: ${{ secrets.GOOGLE_FEADXUS_DRIVE }}
-      AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
-
+    
     steps:
-    - name: 📥 检出代码仓库
-      uses: actions/checkout@v4
-
-    - name: 🐍 配置 Python 环境
-      uses: actions/setup-python@v5
-      with:
-        python-version: '3.10'
-
-    - name: 🔨 配置 Docker 构建环境
-      uses: docker/setup-buildx-action@v2
-
-    - name: 📜 通过脚本安装依赖
-      run: python go.py
+      - name: 📥 检出代码仓库
+        uses: actions/checkout@v4
+      
+      - name: 🔨 配置 Docker 构建环境
+        uses: docker/setup-buildx-action@v2
+      
+      - name: 🚀 启动 ComfyUI Docker 容器
+        run: |
+          docker run -d \
+            --name test-server \
+            -p 8080:80 \
+            nginx:alpine
+          
+          # 增加等待时间，让容器有足够时间启动
+          echo "⏳ 等待容器启动..."
+          for i in {1..30}; do
+            if curl -s http://localhost:8188 > /dev/null 2>&1; then
+              echo "✅ 容器已就绪！"
+              break
+            fi
+            echo "⌛ 正在等待... ($i/30)"
+            sleep 2
+          done
+      
+      - name: 📦 安装 Node.js 和 Localtunnel
+        run: npm install -g localtunnel
+      
+      - name: 🌍 启动网络穿透隧道 (Localtunnel)
+        run: |
+          npx localtunnel --port 8080 --subdomain test-${{ github.run_id }} &
+          LT_PID=$!
+          
+          echo "🔗 正在建立穿透连接..."
+          sleep 5
+          echo "✨ 穿透隧道已启动！"
+          
+          # 保持连接活跃 55 分钟
+          sleep 3300
+          
+          # 清理
+          kill $LT_PID || true
