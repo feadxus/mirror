@@ -418,7 +418,7 @@ def main() -> None:
 
         # 下载网页
         print("\n[2/4] 下载网页...")
-        download_page("tunnel_url")
+        download_page(tunnel_url)
 
         # 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
