@@ -147,12 +147,9 @@ def main() -> None:
 
         # Step 3: 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
-        compress_and_encrypt(
-            CONFIG.BASE_DIR,  # work_dir
-            f"feadxus-backup-{datetime.now().strftime('%Y-%m-%d')}.tar.xz.age"
-        )
-
-        encrypted_file = compress_and_encrypt(age_public_key)
+        output_filename = f"feadxus-backup-{datetime.now().strftime('%Y-%m-%d')}.tar.xz.age"
+        compress_and_encrypt(CONFIG.BASE_DIR, output_filename)
+        encrypted_file = os.path.join(CONFIG.BASE_DIR, output_filename)
 
         # Step 4: 上传到 Google Drive
         print("\n[4/4] 上传到 Google Drive...")
@@ -163,10 +160,9 @@ def main() -> None:
         print("="*50 + "\n")
 
     except Exception as e:
-        now_str = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        now_str = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         print(f"\n[{now_str}] ❌ 错误: {e}")
         sys.exit(1)
-
 
 if __name__ == "__main__":
     main()
