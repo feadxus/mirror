@@ -3,7 +3,6 @@ import sys
 import shutil
 import pathlib
 import tarfile
-import datetime
 import subprocess
 import urllib.request
 from datetime import datetime
@@ -34,7 +33,7 @@ class Config:
     OUTPUT_DIR = BASE_DIR / "output"
     RCLONE_REMOTE = "FEADXUS-Google-Drive"
     RCLONE_REMOTE_PATH = f"{RCLONE_REMOTE}:/X/"
-
+CONFIG = Config()
 
 # =============== 📦 第 6️⃣ 步：设置 rclone 配置 ===============
 def setup_rclone_config() -> None:
