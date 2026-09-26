@@ -1,65 +1,66 @@
-name: 🐳 Docker + 🌐 Localtunnel 穿透隧道
+name: 🐳 Docker + 🌐 Localtunnel 测试
 
 on:
-  workflow_dispatch:  # 手动触发
-  # push:
-  #   branches: [ main ]  # 如果需要自动触发，取消注释
+  workflow_dispatch:
 
 jobs:
   run-docker:
     runs-on: ubuntu-latest
-    
+
     steps:
-      - name: 📥 检出代码仓库
-        uses: actions/checkout@v4
-      
-      - name: 🔨 配置 Docker 构建环境
-        uses: docker/setup-buildx-action@v2
-      
-      - name: 🚀 启动 ComfyUI Docker 容器
+      - name: 🚀 启动 Docker 服务
+        shell: bash
         run: |
+          set -Eeuo pipefail
+
           docker run -d \
             --name test-server \
             -p 8080:80 \
             nginx:alpine
-          
-          # 增加等待时间，让容器有足够时间启动
-          echo "⏳ 等待容器启动..."
+
           for i in {1..30}; do
-            if curl -s http://localhost:8188 > /dev/null 2>&1; then
-              echo "✅ 容器已就绪！"
+            if curl -fsS http://127.0.0.1:8080 > /dev/null; then
+              echo "✅ Docker 服务已启动"
               break
             fi
-            echo "⌛ 正在等待... ($i/30)"
+
+            if [ "$i" -eq 30 ]; then
+              echo "❌ Docker 服务启动失败"
+              docker logs test-server || true
+              exit 1
+            fi
+
             sleep 2
           done
-      
-      - name: 🌍 启动网络穿透隧道
-        run: |
-          set -e
 
-          SUBDOMAIN="test-${{ github.run_id }}"
+      - name: 🌍 启动 Localtunnel 并测试下载
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
           LOG_FILE="$RUNNER_TEMP/localtunnel.log"
 
-          npx localtunnel \
+          npx --yes localtunnel \
             --port 8080 \
-            --subdomain "$SUBDOMAIN" \
+            --subdomain "test-${{ github.run_id }}" \
             > "$LOG_FILE" 2>&1 &
 
           LT_PID=$!
 
-          echo "⏳ 等待 Localtunnel 分配公网地址..."
+          TUNNEL_URL=""
 
           for i in {1..30}; do
-            TUNNEL_URL=$(grep -oE 'https://[^ ]+' "$LOG_FILE" | head -n 1 || true)
+            if [ -f "$LOG_FILE" ]; then
+              TUNNEL_URL=$(grep -oE 'https://[^[:space:]]+' "$LOG_FILE" | head -n 1 || true)
+            fi
 
             if [ -n "$TUNNEL_URL" ]; then
               break
             fi
 
             if ! kill -0 "$LT_PID" 2>/dev/null; then
-              echo "❌ Localtunnel 进程已退出"
-              cat "$LOG_FILE"
+              echo "❌ Localtunnel 启动失败"
+              cat "$LOG_FILE" || true
               exit 1
             fi
 
@@ -67,21 +68,63 @@ jobs:
           done
 
           if [ -z "$TUNNEL_URL" ]; then
-            echo "❌ 没有获取到 Localtunnel URL"
-            cat "$LOG_FILE"
+            echo "❌ 没有获取到 Localtunnel 地址"
+            cat "$LOG_FILE" || true
             exit 1
           fi
 
-          echo "🔗 公网地址：$TUNNEL_URL"
+          echo "✅ 公网地址：$TUNNEL_URL"
 
-          # 写入 GitHub Actions 环境变量，后续步骤可以使用
           echo "TUNNEL_URL=$TUNNEL_URL" >> "$GITHUB_ENV"
 
-          # 写入 GitHub Actions 输出变量
-          echo "tunnel_url=$TUNNEL_URL" >> "$GITHUB_OUTPUT"
+          echo "🔍 测试 curl 下载"
 
-          echo "⏳ 保持隧道运行 55 分钟..."
+          HTTP_CODE=$(curl \
+            -L \
+            -sS \
+            --fail-with-body \
+            -o curl-result.html \
+            -w "%{http_code}" \
+            -H "bypass-tunnel-reminder: true" \
+            "$TUNNEL_URL")
+
+          if [ "$HTTP_CODE" != "200" ]; then
+            echo "❌ curl 下载失败，HTTP 状态码：$HTTP_CODE"
+            cat curl-result.html || true
+            kill "$LT_PID" || true
+            exit 1
+          fi
+
+          echo "✅ curl 下载成功，HTTP 状态码：$HTTP_CODE"
+
+          echo "🔍 测试 wget 下载"
+
+          wget \
+            --header="bypass-tunnel-reminder: true" \
+            --output-document=wget-result.html \
+            "$TUNNEL_URL"
+
+          if [ ! -s wget-result.html ]; then
+            echo "❌ wget 下载结果为空"
+            kill "$LT_PID" || true
+            exit 1
+          fi
+
+          echo "✅ wget 下载成功"
+          ls -lh curl-result.html wget-result.html
+
+          echo "⏳ 保持隧道运行 55 分钟"
+
           sleep 3300
 
           kill "$LT_PID" || true
 
+      - name: 📦 保存测试结果
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: localtunnel-test-result
+          path: |
+            curl-result.html
+            wget-result.html
+          if-no-files-found: ignore
