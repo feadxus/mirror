@@ -143,7 +143,7 @@ def main() -> None:
 
         # Step 2: 下载网页
         print("\n[2/4] 下载网页...")
-        download_page("https://www.example.com")
+        download_page("https://www.google.com")
 
         # Step 3: 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
