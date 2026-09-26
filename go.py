@@ -148,9 +148,6 @@ class UploadToGoogleDriveStep:
 # 🔟. 主流程(把所有步骤串起来)
 def main() -> None:
     try:
-        # ───── Gmail / Tor 业务（保持你原来的实现） ─────
-        service = GmailAuthManager.get_service()
-
         # 支持先从环境变量取公钥，若没有则使用默认值
         AGE_PUBLIC_KEY = os.getenv("AGE_PUBLIC_KEY", "age1pq1pp")
 
