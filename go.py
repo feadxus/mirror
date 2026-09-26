@@ -1,8 +1,10 @@
 import os
 import sys
+import time
 import shutil
 import pathlib
 import tarfile
+import datetime
 import subprocess
 import urllib.request
 from datetime import datetime
@@ -121,12 +123,69 @@ def setup_rclone_config() -> None:
 # =============== 🔽 第 7️⃣ 步：下载网页 ===============
 # 然后继续原有的逻辑
 def download_page(url: str) -> pathlib.Path:
+    """
+    静默下载完整网页为单个 HTML 文件（无任何日志输出）
+    Args:
+        url: 目标网页 URL
+    Returns:
+        pathlib.Path: 保存的 HTML 文件路径
+    Raises:
+        RuntimeError: 下载失败或文件验证失败
+    """
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    output_file = Config.OUTPUT_DIR / "archived_page.html"
-    print(f"🔽 下载完整页面: {url}")
-    run(f"monolith -o '{output_file}' '{url}'")
-    print(f"✅ 下载完成: {output_file}")
-    return output_file
+    timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+    output_file = Config.OUTPUT_DIR / f"archived_page_{timestamp}.html"
+    user_agent = (
+        "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+        "AppleWebKit/537.36 (KHTML, like Gecko) "
+        "Chrome/120.0.0.0 Safari/537.36"
+    )
+    timeout = 30
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
+        try:
+            cmd = (
+                f"monolith "
+                f"--timeout {timeout} "
+                f"--user-agent '{user_agent}' "
+                f"-o '{output_file}' "
+                f"'{url}'"
+            )
+            result = subprocess.run(
+                cmd,
+                shell=True,
+                executable="/bin/bash",
+                capture_output=True,
+                text=True,
+                timeout=timeout + 10,
+            )
+            if result.returncode != 0:
+                if attempt < max_retries:
+                    time.sleep(2)
+                    continue
+                raise RuntimeError(result.stderr or result.stdout)
+            # 文件检验：确保文件存在且有内容
+            if not output_file.is_file():
+                raise RuntimeError(f"File not generated: {output_file}")
+            file_size = output_file.stat().st_size
+            if file_size == 0:
+                raise RuntimeError("File is empty")
+            return output_file
+        except subprocess.TimeoutExpired:
+            if output_file.exists():
+                output_file.unlink()
+            if attempt < max_retries:
+                time.sleep(3)
+                continue
+            raise RuntimeError("Download timeout")
+        except Exception as e:
+            if output_file.exists():
+                output_file.unlink()
+            if attempt < max_retries:
+                time.sleep(2)
+                continue
+            raise RuntimeError(f"Download failed: {e}")
+    raise RuntimeError("Unknown error")
 
 
 # =============== 📦 第 8️⃣ 步：压缩 + 加密 ===============
