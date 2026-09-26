@@ -45,16 +45,13 @@ src_dir = os.path.join(extract_dir, "age")
 subprocess.check_call(["sudo", "cp", f"{src_dir}/age", f"{src_dir}/age-keygen", "/usr/local/bin/"])
 subprocess.check_call(["sudo", "chmod", "+x", "/usr/local/bin/age", "/usr/local/bin/age-keygen"])
 
-# 4️⃣. 安装 skopeo
-subprocess.run(
-    "sudo apt-get update && sudo apt-get install -y skopeo wget",
-    shell=True,
-    executable="/bin/bash",
-    check=True,
-)
-
 # 5️⃣. ☁️ 安装 Google Drive 工具 (rclone) 与 skopeo
+print("--> 安装系统工具和 rclone...")
+
 subprocess.run(
+    "sudo apt-get update && "
+    "sudo apt-get install -y skopeo wget && "
+    "sudo apt-get remove -y rclone || true && "  # 清除旧版本
     "curl -fsSL https://rclone.org/install.sh | sudo bash",
     shell=True,
     executable="/bin/bash",
