@@ -1,3 +1,55 @@
+📌 作用:
+	✔️ 描述:
+🪄 创建文件
+.github/workflows/feadxus_tor_bridge_sync.yml
+	✍️添加
+name: 定时启动
+
+on:
+  schedule:
+    # 💡 完美错峰机制:单数日 UTC 08:00 运行,双数日 UTC 09:00 运行,完美绕过 24h 频率锁定
+    - cron: '0 8 1-31/2 * *'
+    - cron: '0 9 2-30/2 * *'
+  workflow_dispatch: # 保留手动触发按钮
+
+jobs:
+  fetch-bridges:
+    runs-on: ubuntu-latest
+    steps:
+    - name: 📥 检出代码仓库
+      uses: actions/checkout@v4
+
+    - name: 🐍 配置 Python 环境
+      uses: actions/setup-python@v5
+      with:
+        python-version: '3.10'
+
+    - name: 🔨 配置 Docker 构建环境
+      uses: docker/setup-buildx-action@v2
+
+    - name: ☁️ 安装 Google Drive 工具 (rclone) 与 skopeo
+      run: |
+        sudo apt-get update && sudo apt-get install -y skopeo
+        curl https://rclone.org/install.sh | sudo bash
+
+    - name: ⚙️ 设置 rclone 配置
+      env:
+        RCLONE_SECRET_DATA: ${{ secrets.GOOGLE_FEADXUS_DRIVE }}
+      run: |
+        mkdir -p ~/.config/rclone
+        echo "$RCLONE_SECRET_DATA" > ~/.config/rclone/rclone.conf
+
+    - name: 通过脚本安装依赖
+      run: python go.py
+
+
+
+
+📌 作用:
+  ✔️ 提示:
+🪄 仓库目录下创建
+go.py
+  ✍️ 添加
 import os
 import sys
 import shutil
@@ -66,7 +118,28 @@ subprocess.check_call(["sudo", "chmod", "+x", "/usr/local/bin/age", "/usr/local/
 
 # 4️⃣. 安装 skopeo wget 下载工具 monolith 下载工具
 subprocess.run(
-    "sudo apt-get update && sudo apt-get install -y skopeo wget monolith",
+    "sudo apt-get update && sudo apt-get install -y skopeo wget curl",
+    shell=True,
+    executable="/bin/bash",
+    check=True,
+)
+
+# 安装 Rust + monolith
+print("📦 安装 monolith...")
+subprocess.run(
+    "curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y && "
+    "source $HOME/.cargo/env && "
+    "cargo install monolith",
+    shell=True,
+    executable="/bin/bash",
+    check=True,
+)
+
+# 下载预编译的 monolith 二进制
+print("📦 安装 monolith...")
+subprocess.run(
+    "curl -L https://github.com/Y2Z/monolith/releases/download/v2.10.1/monolith-gnu-linux-x86_64 -o /usr/local/bin/monolith && "
+    "chmod +x /usr/local/bin/monolith",
     shell=True,
     executable="/bin/bash",
     check=True,
