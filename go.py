@@ -51,12 +51,15 @@ print("--> 安装系统工具和 rclone...")
 subprocess.run(
     "sudo apt-get update && "
     "sudo apt-get install -y skopeo wget && "
-    "sudo apt-get remove -y rclone || true && "  # 清除旧版本
+    "sudo rm -f /usr/local/bin/rclone && "  # ← 强制删除旧的 rclone
     "curl -fsSL https://rclone.org/install.sh | sudo bash",
     shell=True,
     executable="/bin/bash",
     check=True,
 )
+
+print("✅ 所有工具安装完成")
+
 
 # 6️⃣. ⚙️ 设置 rclone 配置
 rclone_secret = os.getenv("RCLONE_SECRET_DATA")
