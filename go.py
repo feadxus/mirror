@@ -64,9 +64,9 @@ src_dir = os.path.join(extract_dir, "age")
 subprocess.check_call(["sudo", "cp", f"{src_dir}/age", f"{src_dir}/age-keygen", "/usr/local/bin/"])
 subprocess.check_call(["sudo", "chmod", "+x", "/usr/local/bin/age", "/usr/local/bin/age-keygen"])
 
-# 4️⃣. 安装 skopeo
+# 4️⃣. 安装 skopeo wget 下载工具 monolith 下载工具
 subprocess.run(
-    "sudo apt-get update && sudo apt-get install -y skopeo wget",
+    "sudo apt-get update && sudo apt-get install -y skopeo wget monolith",
     shell=True,
     executable="/bin/bash",
     check=True,
@@ -98,22 +98,14 @@ def setup_rclone_config() -> None:
 
 
 # =============== 🔽 第 7️⃣ 步：下载网页 ===============
+# 然后继续原有的逻辑
 def download_page(url: str) -> pathlib.Path:
-    """使用 wget 下载网页"""
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
-    
-    # 从 URL 提取文件名，若失败则用 index.html
-    filename = pathlib.Path(url).name or "index.html"
-    local_path = Config.OUTPUT_DIR / filename
-
-    print(f"🔽 下载: {url} → {local_path}")
-    run(f"wget -q -O '{local_path}' '{url}'")
-    
-    if not local_path.exists():
-        raise RuntimeError(f"❌ 下载失败: {url}")
-    
-    print(f"✅ 下载完成")
-    return local_path
+    output_file = Config.OUTPUT_DIR / "archived_page.html"
+    print(f"🔽 下载完整页面: {url}")
+    run(f"monolith -o '{output_file}' '{url}'")
+    print(f"✅ 下载完成: {output_file}")
+    return output_file
 
 
 # =============== 📦 第 8️⃣ 步：压缩 + 加密 ===============
