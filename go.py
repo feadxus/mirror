@@ -147,10 +147,11 @@ def main() -> None:
 
         # Step 3: 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
-        age_public_key = os.getenv("AGE_PUBLIC_KEY")
-        if not age_public_key:
-            raise RuntimeError("❌ AGE_PUBLIC_KEY 环境变量未设置")
-        
+        compress_and_encrypt(
+            CONFIG.BASE_DIR,  # work_dir
+            f"feadxus-backup-{datetime.now().strftime('%Y-%m-%d')}.tar.xz.age"
+        )
+
         encrypted_file = compress_and_encrypt(age_public_key)
 
         # Step 4: 上传到 Google Drive
