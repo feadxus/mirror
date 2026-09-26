@@ -111,6 +111,189 @@ def setup_rclone_config() -> None:
     print(f"✅ rclone 配置已写入: {conf_path}")
 
 
+
+# =============== 🐳 Docker + Localtunnel ===============
+
+DOCKER_CONTAINER_NAME = "feadxus-test-server"
+DOCKER_PORT = 8080
+DOCKER_IMAGE = "nginx:alpine"
+docker_process = None
+localtunnel_process = None
+localtunnel_log_file = None
+
+def check_required_commands() -> None:
+    required_commands = [
+        "docker",
+        "curl",
+        "npx",
+    ]
+    missing = []
+    for command in required_commands:
+        if shutil.which(command) is None:
+            missing.append(command)
+    if missing:
+        raise RuntimeError(
+            f"❌ 缺少必要命令: {', '.join(missing)}"
+        )
+
+# 启动 Docker 容器,并等待服务就绪.
+def start_docker_container() -> None:
+    print("🐳 启动 Docker 容器...")
+    # 防止上一次残留同名容器导致启动失败
+    subprocess.run(
+        [
+            "docker",
+            "rm",
+            "-f",
+            DOCKER_CONTAINER_NAME,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    subprocess.run(
+        [
+            "docker",
+            "run",
+            "-d",
+            "--name",
+            DOCKER_CONTAINER_NAME,
+            "-p",
+            f"{DOCKER_PORT}:80",
+            DOCKER_IMAGE,
+        ],
+        check=True,
+        capture_output=True,
+        text=True,
+    )
+    for i in range(1, 31):
+        result = subprocess.run(
+            [
+                "curl",
+                "-fsS",
+                f"http://127.0.0.1:{DOCKER_PORT}",
+            ],
+            stdout=subprocess.DEVNULL,
+            stderr=subprocess.DEVNULL,
+            check=False,
+        )
+        if result.returncode == 0:
+            print("✅ Docker 服务已启动")
+            return
+        if i == 30:
+            show_docker_logs()
+            raise RuntimeError("❌ Docker 服务启动失败")
+        time.sleep(2)
+    raise RuntimeError("❌ Docker 服务启动超时")
+
+def show_docker_logs() -> None:
+    """
+    输出 Docker 容器日志。
+    """
+    result = subprocess.run(
+        [
+            "docker",
+            "logs",
+            DOCKER_CONTAINER_NAME,
+        ],
+        capture_output=True,
+        text=True,
+        check=False,
+    )
+    if result.stdout:
+        print(result.stdout)
+    if result.stderr:
+        print(result.stderr)
+
+# 启动 Localtunnel，读取并返回公网地址。
+def start_localtunnel() -> str:
+    global localtunnel_process
+    global localtunnel_log_file
+    print("🌐 启动 Localtunnel...")
+    log_path = pathlib.Path("/tmp/feadxus-localtunnel.log")
+    localtunnel_log_file = log_path
+    if log_path.exists():
+        log_path.unlink()
+    log_file = open(log_path, "w", encoding="utf-8")
+    subdomain = f"test-{os.getenv('GITHUB_RUN_ID', str(int(time.time())))}"
+    localtunnel_process = subprocess.Popen(
+        [
+            "npx",
+            "--yes",
+            "localtunnel",
+            "--port",
+            str(DOCKER_PORT),
+            "--subdomain",
+            subdomain,
+        ],
+        stdout=log_file,
+        stderr=subprocess.STDOUT,
+        text=True,
+    )
+    tunnel_url = ""
+    for _ in range(30):
+        if log_path.exists():
+            content = log_path.read_text(
+                encoding="utf-8",
+                errors="ignore",
+            )
+            for line in content.splitlines():
+                line = line.strip()
+                if line.startswith("your url is:"):
+                    tunnel_url = line.split("your url is:", 1)[1].strip()
+                    break
+        if tunnel_url:
+            break
+        if localtunnel_process.poll() is not None:
+            content = log_path.read_text(
+                encoding="utf-8",
+                errors="ignore",
+            )
+            raise RuntimeError(
+                f"❌ Localtunnel 启动失败:\n{content}"
+            )
+        time.sleep(2)
+    log_file.close()
+    if not tunnel_url:
+        content = log_path.read_text(
+            encoding="utf-8",
+            errors="ignore",
+        )
+        raise RuntimeError(
+            f"❌ 未获取到 Localtunnel 地址:\n{content}"
+        )
+    print(f"✅ 公网地址：{tunnel_url}")
+    return tunnel_url.rstrip("/")
+
+# 清理 Localtunnel 和 Docker 容器
+def cleanup_services() -> None:
+    global localtunnel_process
+    print("🧹 清理服务...")
+    if localtunnel_process is not None:
+        if localtunnel_process.poll() is None:
+            localtunnel_process.terminate()
+            try:
+                localtunnel_process.wait(timeout=5)
+            except subprocess.TimeoutExpired:
+                localtunnel_process.kill()
+    subprocess.run(
+        [
+            "docker",
+            "rm",
+            "-f",
+            DOCKER_CONTAINER_NAME,
+        ],
+        stdout=subprocess.DEVNULL,
+        stderr=subprocess.DEVNULL,
+        check=False,
+    )
+    print("✅ 清理完成")
+
+
+
+
+
+
 # 下载网页
 def download_page(url: str) -> pathlib.Path:
     """
@@ -215,6 +398,8 @@ def upload_to_drive(local_file: pathlib.Path, remote_path: str = None) -> None:
 
 # 执行每个模块
 def main() -> None:
+    tunnel_url = None
+
     try:
         print("\n" + "="*50)
         print("开始执行下载-压缩-加密-上传流程")
@@ -224,9 +409,16 @@ def main() -> None:
         print("[1/4] 设置 rclone 配置...")
         setup_rclone_config()
 
+        check_required_commands()
+        # 启动 Docker
+        start_docker_container()
+
+        # 启动 Localtunnel
+        tunnel_url = start_localtunnel()
+
         # 下载网页
         print("\n[2/4] 下载网页...")
-        download_page("https://www.google.com")
+        download_page("tunnel_url")
 
         # 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
