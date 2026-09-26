@@ -296,22 +296,42 @@ def cleanup_services() -> None:
 
 # 下载网页
 def download_page_with_curl(url: str) -> pathlib.Path:
+    """
+    只从传入的映射域名下载页面。
+    不跟随任何 HTTP 重定向。
+    """
+
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
 
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
-    output_file = Config.OUTPUT_DIR / f"archived_page_{timestamp}.html"
+    output_file = (
+        Config.OUTPUT_DIR / f"archived_page_{timestamp}.html"
+    )
+
+    print(f"⬇️ 仅从映射地址下载: {url}")
 
     result = subprocess.run(
         [
             "curl",
-            "-fsSL",
+            "-f",              # HTTP 4xx/5xx 视为失败
+            "-sS",             # 静默进度，但显示错误
             "--retry", "5",
             "--retry-delay", "3",
             "--connect-timeout", "15",
             "--max-time", "120",
+
+            # 不允许跟随 301/302/307/308
+            # 注意：这里故意不写 -L 或 --location
             "-H", "Bypass-Tunnel-Reminder: true",
             "-A", "Mozilla/5.0",
+
             "-o", str(output_file),
+
+            # 输出最终实际请求地址和 HTTP 状态码
+            "-w",
+            "\nHTTP_STATUS:%{http_code}\n"
+            "EFFECTIVE_URL:%{url_effective}\n",
+
             url,
         ],
         capture_output=True,
@@ -319,12 +339,48 @@ def download_page_with_curl(url: str) -> pathlib.Path:
     )
 
     if result.returncode != 0:
-        raise RuntimeError(result.stderr)
+        if output_file.exists():
+            output_file.unlink()
+
+        raise RuntimeError(
+            f"❌ 映射域名下载失败:\n"
+            f"请求地址: {url}\n"
+            f"{result.stderr.strip()}"
+        )
+
+    print(result.stdout.strip())
+
+    # 解析 HTTP 状态码
+    status_code = None
+
+    for line in result.stdout.splitlines():
+        if line.startswith("HTTP_STATUS:"):
+            status_code = int(line.split(":", 1)[1])
+
+    if status_code is None:
+        if output_file.exists():
+            output_file.unlink()
+        raise RuntimeError("❌ 无法确认 HTTP 状态码")
+
+    # 只接受 2xx，拒绝所有重定向
+    if not 200 <= status_code < 300:
+        if output_file.exists():
+            output_file.unlink()
+
+        raise RuntimeError(
+            f"❌ 映射域名没有直接返回页面\n"
+            f"请求地址: {url}\n"
+            f"HTTP 状态码: {status_code}\n"
+            f"程序未跟随重定向"
+        )
 
     if not output_file.exists() or output_file.stat().st_size == 0:
-        raise RuntimeError("下载结果为空")
+        raise RuntimeError("❌ 下载结果为空")
+
+    print(f"✅ 页面已从映射域名直接下载: {output_file}")
 
     return output_file
+
 
 
 # 🔐 加密压缩下载的页面
