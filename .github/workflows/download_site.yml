@@ -10,6 +10,10 @@ on:
 jobs:
   fetch-bridges:
     runs-on: ubuntu-latest
+    env:
+      RCLONE_SECRET_DATA: ${{ secrets.GOOGLE_FEADXUS_DRIVE }}
+      AGE_PUBLIC_KEY: ${{ secrets.AGE_PUBLIC_KEY }}
+
     steps:
     - name: 📥 检出代码仓库
       uses: actions/checkout@v4
