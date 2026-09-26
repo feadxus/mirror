@@ -297,7 +297,13 @@ def cleanup_services() -> None:
 # 下载网页
 def download_page(url: str) -> pathlib.Path:
     """
-    通过 curl 添加 Localtunnel bypass Header 下载网页。
+    静默下载完整网页为单个 HTML 文件(无任何日志输出)
+    Args:
+        url: 目标网页 URL
+    Returns:
+        pathlib.Path: 保存的 HTML 文件路径
+    Raises:
+        RuntimeError: 下载失败或文件验证失败
     """
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -307,65 +313,52 @@ def download_page(url: str) -> pathlib.Path:
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     )
-    for attempt in range(1, 4):
+    timeout = 30
+    max_retries = 3
+    for attempt in range(1, max_retries + 1):
         try:
+            cmd = (
+                f"monolith "
+                f"--timeout {timeout} "
+                f"--user-agent '{user_agent}' "
+                f"-o '{output_file}' "
+                f"'{url}'"
+            )
             result = subprocess.run(
-                [
-                    "curl",
-                    "-L",
-                    "--fail-with-body",
-                    "--silent",
-                    "--show-error",
-                    "--max-time",
-                    "40",
-                    "-H",
-                    "bypass-tunnel-reminder: true",
-                    "-A",
-                    user_agent,
-                    url,
-                    "-o",
-                    str(output_file),
-                ],
+                cmd,
+                shell=True,
+                executable="/bin/bash",
                 capture_output=True,
                 text=True,
-                timeout=50,
-                check=False,
+                timeout=timeout + 10,
             )
             if result.returncode != 0:
-                if output_file.exists():
-                    output_file.unlink()
-                if attempt < 3:
-                    time.sleep(3)
+                if attempt < max_retries:
+                    time.sleep(2)
                     continue
-                raise RuntimeError(
-                    result.stderr or "curl 下载失败"
-                )
+                raise RuntimeError(result.stderr or result.stdout)
+            # 文件检验:确保文件存在且有内容
             if not output_file.is_file():
-                raise RuntimeError("网页文件没有生成")
+                raise RuntimeError(f"File not generated: {output_file}")
             file_size = output_file.stat().st_size
             if file_size == 0:
-                raise RuntimeError("网页文件为空")
-            print(
-                f"✅ 网页下载成功: "
-                f"{output_file} "
-                f"({file_size} bytes)"
-            )
+                raise RuntimeError("File is empty")
             return output_file
         except subprocess.TimeoutExpired:
             if output_file.exists():
                 output_file.unlink()
-            if attempt < 3:
+            if attempt < max_retries:
                 time.sleep(3)
                 continue
-            raise RuntimeError("网页下载超时")
+            raise RuntimeError("Download timeout")
         except Exception as e:
             if output_file.exists():
                 output_file.unlink()
-            if attempt < 3:
-                time.sleep(3)
+            if attempt < max_retries:
+                time.sleep(2)
                 continue
-            raise RuntimeError(f"网页下载失败: {e}")
-    raise RuntimeError("网页下载失败")
+            raise RuntimeError(f"Download failed: {e}")
+    raise RuntimeError("Unknown error")
 
 
 
