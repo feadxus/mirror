@@ -327,7 +327,20 @@ def download_page_with_curl(url: str) -> pathlib.Path:
     return output_file
 
 
-
+# 🔐 加密压缩下载的页面
+def compress_and_encrypt(work_dir, output_file):
+    age_public_key = os.getenv('AGE_PUBLIC_KEY', '').strip()
+    if not age_public_key:
+        raise RuntimeError("AGE_PUBLIC_KEY 环境变量未设置")
+    output_file = pathlib.Path(work_dir) / output_file
+    folder_to_compress = os.path.basename(CONFIG.OUTPUT_DIR)
+    cmd = (
+        f"tar -cJf - -C '{work_dir}' '{folder_to_compress}' | "
+        f"age -r '{age_public_key}' > '{output_file}'"
+    )
+    result = subprocess.run(cmd, shell=True, check=True, cwd=work_dir)
+    print(f"🔒 压缩加密完成! 生成文件: {output_file}")
+    return output_file
 
 # 保存至 Google Drive 网盘
 def upload_to_drive(local_file: pathlib.Path, remote_path: str = None) -> None:
