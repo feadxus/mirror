@@ -72,29 +72,29 @@ def download_page(url: str) -> pathlib.Path:
 
 
 # =============== 📦 第 8️⃣ 步：压缩 + 加密 ===============
-def compress_and_encrypt(age_public_key: str) -> pathlib.Path:
-    """把 OUTPUT_DIR 打包压缩后，用 age 公钥加密"""
-    if not Config.OUTPUT_DIR.exists() or not any(Config.OUTPUT_DIR.iterdir()):
-        raise RuntimeError(f"❌ 待压缩文件夹不存在或为空: {Config.OUTPUT_DIR}")
-
-    date_str = datetime.datetime.now().strftime("%Y-%m-%d")
-    output_name = f"feadxus-backup-{date_str}.tar.xz.age"
-    output_path = Config.BASE_DIR / output_name
-
+def compress_and_encrypt(work_dir, output_file):
+    """压缩并用 age 加密文件夹"""
+    age_public_key = os.getenv('AGE_PUBLIC_KEY', '').strip()
+    
+    if not age_public_key:
+        raise RuntimeError("AGE_PUBLIC_KEY 环境变量未设置")
+    
+    output_file = os.path.join(work_dir, output_file)
+    folder_to_compress = os.path.basename(CONFIG.OUTPUT_DIR)  # 通常是 'output'
+    
     cmd = (
-        f"tar -cJf - -C '{Config.BASE_DIR}' '{Config.OUTPUT_DIR.name}' | "
-        f"age -r '{age_public_key}' > '{output_path}'"
+        f"tar -cJf - -C '{work_dir}' '{folder_to_compress}' | "
+        f"age -r '{age_public_key}' > '{output_file}'"
     )
     
-    print(f"📦 压缩并加密: {Config.OUTPUT_DIR.name} → {output_name}")
-    run(cmd)
+    print(f"📦 正在打包压缩并加密文件夹 [{folder_to_compress}] -> {os.path.basename(output_file)}...")
     
-    if not output_path.exists():
-        raise RuntimeError(f"❌ 压缩加密失败，文件未生成: {output_path}")
+    # ✅ 关键：加上 cwd 参数，和旧脚本一致
+    result = subprocess.run(cmd, shell=True, check=True, cwd=work_dir)
     
-    file_size = output_path.stat().st_size / (1024 * 1024)  # 转为 MB
-    print(f"✅ 加密文件生成: {output_path} ({file_size:.2f} MB)")
-    return output_path
+    print(f"🔒 压缩加密完成! 生成文件: {output_file}")
+    return True
+
 
 
 # =============== ☁️ 第 9️⃣ 步：上传到 Google Drive ===============
