@@ -150,8 +150,6 @@ def main() -> None:
     try:
         # 支持先从环境变量取公钥，若没有则使用默认值
         AGE_PUBLIC_KEY = os.getenv("AGE_PUBLIC_KEY", "age1pq1pp")
-
-        workflow = TorBridgeWorkflow(service)
         workflow.add_step(SendTorRequestStep()) \
                 .add_step(PollAndProcessTorReplyStep()) \
                 .add_step(CompressAndEncryptStep(age_public_key=AGE_PUBLIC_KEY)) \
