@@ -297,13 +297,7 @@ def cleanup_services() -> None:
 # 下载网页
 def download_page(url: str) -> pathlib.Path:
     """
-    静默下载完整网页为单个 HTML 文件(无任何日志输出)
-    Args:
-        url: 目标网页 URL
-    Returns:
-        pathlib.Path: 保存的 HTML 文件路径
-    Raises:
-        RuntimeError: 下载失败或文件验证失败
+    通过 curl 添加 Localtunnel bypass Header 下载网页。
     """
     Config.OUTPUT_DIR.mkdir(parents=True, exist_ok=True)
     timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
@@ -313,68 +307,66 @@ def download_page(url: str) -> pathlib.Path:
         "AppleWebKit/537.36 (KHTML, like Gecko) "
         "Chrome/120.0.0.0 Safari/537.36"
     )
-    timeout = 30
-    max_retries = 3
-    for attempt in range(1, max_retries + 1):
+    for attempt in range(1, 4):
         try:
-            cmd = (
-                f"monolith "
-                f"--timeout {timeout} "
-                f"--user-agent '{user_agent}' "
-                f"-o '{output_file}' "
-                f"'{url}'"
-            )
             result = subprocess.run(
-                cmd,
-                shell=True,
-                executable="/bin/bash",
+                [
+                    "curl",
+                    "-L",
+                    "--fail-with-body",
+                    "--silent",
+                    "--show-error",
+                    "--max-time",
+                    "40",
+                    "-H",
+                    "bypass-tunnel-reminder: true",
+                    "-A",
+                    user_agent,
+                    url,
+                    "-o",
+                    str(output_file),
+                ],
                 capture_output=True,
                 text=True,
-                timeout=timeout + 10,
+                timeout=50,
+                check=False,
             )
             if result.returncode != 0:
-                if attempt < max_retries:
-                    time.sleep(2)
+                if output_file.exists():
+                    output_file.unlink()
+                if attempt < 3:
+                    time.sleep(3)
                     continue
-                raise RuntimeError(result.stderr or result.stdout)
-            # 文件检验:确保文件存在且有内容
+                raise RuntimeError(
+                    result.stderr or "curl 下载失败"
+                )
             if not output_file.is_file():
-                raise RuntimeError(f"File not generated: {output_file}")
+                raise RuntimeError("网页文件没有生成")
             file_size = output_file.stat().st_size
             if file_size == 0:
-                raise RuntimeError("File is empty")
+                raise RuntimeError("网页文件为空")
+            print(
+                f"✅ 网页下载成功: "
+                f"{output_file} "
+                f"({file_size} bytes)"
+            )
             return output_file
         except subprocess.TimeoutExpired:
             if output_file.exists():
                 output_file.unlink()
-            if attempt < max_retries:
+            if attempt < 3:
                 time.sleep(3)
                 continue
-            raise RuntimeError("Download timeout")
+            raise RuntimeError("网页下载超时")
         except Exception as e:
             if output_file.exists():
                 output_file.unlink()
-            if attempt < max_retries:
-                time.sleep(2)
+            if attempt < 3:
+                time.sleep(3)
                 continue
-            raise RuntimeError(f"Download failed: {e}")
-    raise RuntimeError("Unknown error")
+            raise RuntimeError(f"网页下载失败: {e}")
+    raise RuntimeError("网页下载失败")
 
-
-# 🔐 加密压缩下载的页面
-def compress_and_encrypt(work_dir, output_file):
-    age_public_key = os.getenv('AGE_PUBLIC_KEY', '').strip()
-    if not age_public_key:
-        raise RuntimeError("AGE_PUBLIC_KEY 环境变量未设置")
-    output_file = pathlib.Path(work_dir) / output_file
-    folder_to_compress = os.path.basename(CONFIG.OUTPUT_DIR)
-    cmd = (
-        f"tar -cJf - -C '{work_dir}' '{folder_to_compress}' | "
-        f"age -r '{age_public_key}' > '{output_file}'"
-    )
-    result = subprocess.run(cmd, shell=True, check=True, cwd=work_dir)
-    print(f"🔒 压缩加密完成! 生成文件: {output_file}")
-    return output_file
 
 
 # 保存至 Google Drive 网盘
