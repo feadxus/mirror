@@ -35,6 +35,51 @@ class Config:
     RCLONE_REMOTE_PATH = f"{RCLONE_REMOTE}:/X/"
 CONFIG = Config()
 
+# 1️⃣. 安装 pip 依赖库
+pip_packages = [
+    "google-auth-oauthlib",
+    "google-api-python-client"
+]
+print("--> 1. 正在安装 Python 依赖库...")
+# ⚠️ 注意:不能使用 sys.executable,直接调用系统环境的 pip3
+subprocess.check_call(["pip3", "install", *pip_packages])
+
+
+# 2️⃣. 下载并安装特定版本的 age (v1.3.2)
+age_version = "v1.3.2"
+url = f"https://github.com/FiloSottile/age/releases/download/{age_version}/age-{age_version}-linux-amd64.tar.gz"
+tar_path = "/tmp/age.tar.gz"
+extract_dir = "/tmp/age_bin"
+
+print(f"--> 2. 正在从 GitHub 下载 age {age_version}...")
+urllib.request.urlretrieve(url, tar_path)
+
+print("--> 正在解压并安装 age 应用文件...")
+os.makedirs(extract_dir, exist_ok=True)
+with tarfile.open(tar_path, "r:gz") as tar:
+    tar.extractall(path=extract_dir)
+
+# 3️⃣. 将解压出来的 age 和 age-keygen 文件复制/移动到 /usr/local/bin/
+src_dir = os.path.join(extract_dir, "age")
+subprocess.check_call(["sudo", "cp", f"{src_dir}/age", f"{src_dir}/age-keygen", "/usr/local/bin/"])
+subprocess.check_call(["sudo", "chmod", "+x", "/usr/local/bin/age", "/usr/local/bin/age-keygen"])
+
+# 4️⃣. 安装 skopeo
+subprocess.run(
+    "sudo apt-get update && sudo apt-get install -y skopeo wget",
+    shell=True,
+    executable="/bin/bash",
+    check=True,
+)
+
+# 5️⃣. ☁️ 安装 Google Drive 工具 (rclone) 与 skopeo
+subprocess.run(
+    "curl -fsSL https://rclone.org/install.sh | sudo bash",
+    shell=True,
+    executable="/bin/bash",
+    check=True,
+)
+
 # =============== 📦 第 6️⃣ 步：设置 rclone 配置 ===============
 def setup_rclone_config() -> None:
     """从环境变量读取 rclone 配置并写入文件"""
