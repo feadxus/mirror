@@ -124,22 +124,20 @@ def compress_and_encrypt(work_dir, output_file):
     if not age_public_key:
         raise RuntimeError("AGE_PUBLIC_KEY 环境变量未设置")
     
-    output_file = os.path.join(work_dir, output_file)
-    folder_to_compress = os.path.basename(CONFIG.OUTPUT_DIR)  # 通常是 'output'
+    output_file = pathlib.Path(work_dir) / output_file  # ✅ 使用 Path
+    folder_to_compress = os.path.basename(CONFIG.OUTPUT_DIR)
     
     cmd = (
         f"tar -cJf - -C '{work_dir}' '{folder_to_compress}' | "
         f"age -r '{age_public_key}' > '{output_file}'"
     )
     
-    print(f"📦 正在打包压缩并加密文件夹 [{folder_to_compress}] -> {os.path.basename(output_file)}...")
+    print(f"📦 正在打包压缩并加密文件夹 [{folder_to_compress}] -> {output_file.name}...")
     
-    # ✅ 关键：加上 cwd 参数，和旧脚本一致
     result = subprocess.run(cmd, shell=True, check=True, cwd=work_dir)
     
     print(f"🔒 压缩加密完成! 生成文件: {output_file}")
-    return True
-
+    return output_file  # ✅ 返回 Path 对象
 
 
 # =============== ☁️ 第 9️⃣ 步：上传到 Google Drive ===============
@@ -193,8 +191,7 @@ def main() -> None:
         # Step 3: 压缩 + 加密
         print("\n[3/4] 压缩并加密...")
         output_filename = f"feadxus-backup-{datetime.now().strftime('%Y-%m-%d')}.tar.xz.age"
-        compress_and_encrypt(CONFIG.BASE_DIR, output_filename)
-        encrypted_file = os.path.join(CONFIG.BASE_DIR, output_filename)
+        encrypted_file = compress_and_encrypt(CONFIG.BASE_DIR, output_filename)
 
         # Step 4: 上传到 Google Drive
         print("\n[4/4] 上传到 Google Drive...")
